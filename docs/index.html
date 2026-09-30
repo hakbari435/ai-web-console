@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Web Console — اجرای Claude Code و Codex در مرورگر با رابط فارسی</title>
+
+  <!-- SEO -->
+  <meta name="description" content="وب‌اپ متن‌باز برای اجرای Claude Code CLI و Codex CLI داخل مرورگر — رابط فارسی RTL، نمایش بی‌نقص متن مختلط فارسی/انگلیسی، کشف سشن‌های واقعی، جستجوی ترنسکریپت و اجرای کاملاً محلی. Open-source web UI for Claude Code & Codex CLI with Persian RTL interface.">
+  <meta name="keywords" content="claude code web ui, codex cli web interface, claude cli browser, persian ai terminal, farsi rtl chat, ترمینال تحت وب هوش مصنوعی, اجرای کلاد در مرورگر, رابط فارسی claude, codex فارسی, کنسول وب cli, ai web console">
+  <meta name="author" content="hakbari435">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://hakbari435.github.io/ai-web-console/">
+
+  <!-- Open Graph / Twitter -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="AI Web Console — Claude Code و Codex در مرورگر">
+  <meta property="og:description" content="رابط وب فارسی برای Claude Code CLI و Codex CLI — متن‌باز، محلی و بی‌نقص برای فارسی‌نویسی">
+  <meta property="og:url" content="https://hakbari435.github.io/ai-web-console/">
+  <meta property="og:image" content="https://hakbari435.github.io/ai-web-console/ui-shot.png">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💬</text></svg>">
+  <style>
+    :root {
+      --bg: #0e1017; --panel: #161a24; --border: #2a3142; --text: #e6eaf2;
+      --muted: #a6b1c6; --accent: #6d78f5; --teal: #2dd4bf;
+      font-family: Vazirmatn, Tahoma, "Segoe UI", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); line-height: 1.9; }
+    .wrap { max-width: 880px; margin: 0 auto; padding: 48px 24px 80px; }
+    h1 { font-size: 32px; margin: 0 0 8px; }
+    h1 span { color: var(--accent); }
+    .tagline { color: var(--muted); font-size: 17px; margin-bottom: 32px; }
+    .tagline-en { direction: ltr; text-align: left; color: var(--muted); font-size: 14px; display: block; margin-top: 6px; }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 24px 28px; margin: 16px 0; }
+    .card h2 { font-size: 18px; margin: 0 0 12px; }
+    .card h2 .en { color: var(--muted); font-size: 13px; font-weight: 400; }
+    ul { margin: 0; padding-inline-start: 22px; }
+    li { margin: 7px 0; }
+    li::marker { color: var(--accent); }
+    pre { direction: ltr; text-align: left; background: #0a0d13; border: 1px solid var(--border); border-radius: 10px; padding: 16px 20px; overflow-x: auto; font-size: 14px; }
+    code { font-family: Consolas, monospace; color: #2dd4bf; }
+    .btns { display: flex; gap: 12px; flex-wrap: wrap; margin: 28px 0; }
+    .btn { display: inline-block; padding: 13px 26px; border-radius: 10px; font-size: 15px; font-weight: 700; text-decoration: none; }
+    .btn.primary { background: var(--accent); color: #fff; }
+    .btn.ghost { border: 1px solid var(--border); color: var(--muted); }
+    .btn:hover { opacity: .9; }
+    .shot { width: 100%; border-radius: 14px; border: 1px solid var(--border); margin: 20px 0; }
+    footer { color: var(--muted); font-size: 13px; margin-top: 48px; border-top: 1px solid var(--border); padding-top: 20px; }
+    a { color: var(--accent); }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+    .chip { background: var(--panel); border: 1px solid var(--border); border-radius: 999px; padding: 4px 14px; font-size: 13px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>کنسول وب AI <span>— Claude Code و Codex در مرورگر</span></h1>
+    <p class="tagline">
+      وب‌اپ متن‌باز برای اجرای Claude Code CLI و Codex CLI داخل مرورگر — با رابط فارسی و نمایش بی‌نقص متن مختلط.
+      <span class="tagline-en">Open-source, local-first web UI for Claude Code &amp; Codex CLI with a Persian (RTL) interface.</span>
+    </p>
+
+    <div class="btns">
+      <a class="btn primary" href="https://github.com/hakbari435/ai-web-console">⭐ دریافت از GitHub</a>
+      <a class="btn ghost" href="https://github.com/hakbari435/ai-web-console/blob/main/README.md">📖 مستندات کامل</a>
+    </div>
+
+    <img class="shot" src="ui-shot.png" alt="رابط کاربری کنسول وب AI — سایدبار سشن‌ها و چت فارسی RTL">
+
+    <div class="card">
+      <h2>✨ امکانات <span class="en">/ Features</span></h2>
+      <ul>
+        <li>کشف خودکار سشن‌های واقعی Claude و Codex از دیسک — حتی سشن‌هایی که از ترمینال ساخته‌اید</li>
+        <li>نوبت‌های پس‌زمینه: جابه‌جایی بین گفتگوها کار در حال اجرا را قطع نمی‌کند</li>
+        <li>صف پیام قابل ویرایش + توقف هر لحظه</li>
+        <li>فورک سشن (شاخه‌زدن گفتگو حتی تا یک پاسخ مشخص)</li>
+        <li>جستجوی متنی در همه‌ی ترنسکریپت‌ها با نرمال‌سازی فارسی/عربی (ي→ی، ك→ک)</li>
+        <li>کشف زنده‌ی لیست مدل‌های Codex + انتخاب مدل و میزان استدلال</li>
+        <li>نمایش مصرف توکن، ظرفیت زمینه و آمار گفتگو</li>
+        <li>فارسی‌نویسی بی‌نقص: جهتِ هر پاراگراف جدا تشخیص داده می‌شود؛ بلاک کد همیشه چپ‌به‌راست</li>
+        <li>اجرای کاملاً محلی روی 127.0.0.1 — کانفیگ و لاگین CLI خودتان بدون تغییر</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>🚀 شروع سریع <span class="en">/ Quick Start</span></h2>
+      <pre><code>git clone https://github.com/hakbari435/ai-web-console.git
+cd ai-web-console
+npm install
+npm start    <span style="color:#6f7b90"># → http://127.0.0.1:3000</span></code></pre>
+      <p style="color: var(--muted); font-size: 14px;">پیش‌نیاز: Node.js 18+ و Claude Code و/یا Codex CLI نصب و لاگین‌شده. روی ویندوز فقط <code style="direction:ltr">run.bat</code> را دابل‌کلیک کنید.</p>
+    </div>
+
+    <div class="chips">
+      <span class="chip">Node.js</span><span class="chip">Express</span><span class="chip">WebSocket</span>
+      <span class="chip">Claude Code CLI</span><span class="chip">Codex CLI</span><span class="chip">فارسی RTL</span>
+      <span class="chip">Vazirmatn</span><span class="chip">Local-first</span><span class="chip">MIT License</span>
+    </div>
+
+    <footer>
+      ساخته‌شده توسط <a href="https://github.com/hakbari435">hakbari435</a> — تحت لایسنس
+      <a href="https://github.com/hakbari435/ai-web-console/blob/main/LICENSE">MIT</a>
+    </footer>
+  </div>
+</body>
+</html>
