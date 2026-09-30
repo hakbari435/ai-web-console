@@ -1,0 +1,15 @@
+{
+  "name": "ai-web-console",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "کنسول وب محلی برای اجرای Claude Code و Codex با پشتیبانی بی‌نقص فارسی",
+  "scripts": {
+    "start": "node server/index.js"
+  },
+  "dependencies": {
+    "@fontsource/vazirmatn": "^5.2.5",
+    "express": "^4.21.2",
+    "ws": "^8.18.0"
+  }
+}

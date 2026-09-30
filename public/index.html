@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>وب‌ویو CLI</title>
+  <link rel="stylesheet" href="/vendor/fontsource/400.css" />
+  <link rel="stylesheet" href="/vendor/fontsource/500.css" />
+  <link rel="stylesheet" href="/vendor/fontsource/700.css" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div id="app">
+    <aside id="sidebar">
+      <div class="side-head">
+        <div class="brand">وب‌ویو <span>CLI</span></div>
+        <div class="sec-head">
+          <span class="sec-label">پروژه‌ها و گفتگوها</span>
+          <div class="sec-tools">
+            <button id="browse-btn" class="browse-btn" title="انتخاب پوشه‌ی پروژه‌ی جدید">📁 انتخاب پروژه</button>
+            <button id="ext-refresh" title="بارگذاری دوباره">↻</button>
+          </div>
+        </div>
+      </div>
+      <div class="side-body">
+        <div id="session-list"></div>
+      </div>
+    </aside>
+
+    <main id="main">
+      <header id="topbar">
+        <div class="brand topbar-brand">وب‌ویو <span>CLI</span></div>
+        <button id="sidebar-toggle" title="بستن منوی پروژه‌ها" aria-controls="sidebar" aria-expanded="true">☰</button>
+        <div id="conv-heading">
+          <div id="conv-title">گفتگویی انتخاب نشده</div>
+          <div id="conv-project" hidden></div>
+        </div>
+        <button id="stats-btn" title="آمار رفت‌وبرگشت‌های گفتگو" aria-label="آمار گفتگو" hidden>!</button>
+        <button id="search-btn" title="جستجو در گفتگوها" aria-label="جستجو در گفتگوها">🔍</button>
+        <div id="usage-info" hidden></div>
+        <div class="top-actions">
+          <span id="conv-cli-badge" class="badge" hidden></span>
+          <span id="model-label" class="model-label" hidden>مدل:</span>
+          <select id="model-select" title="مدل این سشن" hidden></select>
+          <span id="effort-label" class="model-label" hidden>تفکر:</span>
+          <select id="effort-select" title="میزان reasoning effort این سشن" hidden></select>
+          <button id="models-btn" title="مدیریت لیست مدل‌های قابل‌انتخاب">⚙</button>
+          <button id="refresh-btn" title="بارگذاری دوباره‌ی این گفتگو">↻</button>
+        </div>
+      </header>
+
+      <div id="messages">
+        <div class="empty" id="empty-state">
+          <div class="empty-emoji">💬</div>
+          <p>یک سشن رو از سایدبار باز کن یا با «انتخاب پروژه» پروژه‌ی جدیدی اضافه کن.</p>
+          <p class="hint">خروجی فارسی، انگلیسی و جدول‌ها اینجا درست و راست‌به‌چپ نمایش داده می‌شن.</p>
+        </div>
+      </div>
+
+      <section id="search-view" hidden>
+        <div class="search-toolbar">
+          <div class="search-query-row">
+            <input id="search-input" type="search" autocomplete="off" aria-label="عبارت جستجو" placeholder="جستجو در متن گفتگوها" />
+            <button id="search-submit" title="جستجو" aria-label="جستجو">🔍</button>
+          </div>
+          <div id="search-scopes" class="search-scopes" role="group" aria-label="محدوده جستجو">
+            <button type="button" data-scope="all" class="active" aria-pressed="true">همه پروژه‌ها</button>
+            <button type="button" data-scope="project" aria-pressed="false">پروژه فعلی</button>
+            <button type="button" data-scope="session" aria-pressed="false">سشن فعلی</button>
+          </div>
+        </div>
+        <div id="search-meta" class="search-meta"></div>
+        <div id="search-results" class="search-results"></div>
+      </section>
+
+      <div id="queue-zone" hidden></div>
+      <div id="composer">
+        <textarea id="input" dir="auto" rows="1"
+          placeholder="پیامت رو بنویس…  (Enter برای ارسال، Shift+Enter خط جدید)"></textarea>
+        <button id="stop-btn" hidden>■ توقف</button>
+        <button id="send-btn">ارسال</button>
+      </div>
+    </main>
+  </div>
+
+  <div id="modal" class="modal-overlay" hidden>
+    <div class="modal">
+      <div class="modal-head">
+        <span id="modal-title">مدیریت لیست مدل‌ها</span>
+        <button id="modal-close" title="بستن">×</button>
+      </div>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
