@@ -1,15 +1,30 @@
 // آداپتور Claude Code — هر نوبت یک پروسه:
 //   claude --print --output-format stream-json --verbose
 //          --permission-mode <mode> [--model M] [--resume SID] "<prompt>"
+//   iclaude: iclaude run <همان آرگومان‌ها>
 import { CLAUDE_CMD, CLAUDE_MODEL, CLAUDE_PERMISSION_MODE, CLAUDE_SKIP_PERMISSIONS,
-         CLAUDE_EXTRA_ARGS, claudeEnv, splitArgs } from '../config.js';
+         CLAUDE_EXTRA_ARGS, ICLAUDE_CMD, claudeEnv, iclaudeEnv, splitArgs } from '../config.js';
+import os from 'node:os';
+import path from 'node:path';
 import { Process, ev, flattenContent } from './base.js';
 
+const NON_INTERACTIVE_HINT =
+  'سرویس iclaude اجرای غیرتعاملی (--print) را نمی‌پذیرد؛ این سشن را در ترمینال با iclaude run ادامه دهید.';
+
 export class ClaudeAdapter {
-  get id() { return 'claude'; }
+  constructor({ id = 'claude', command = [CLAUDE_CMD], env = claudeEnv, extraArgs = () => [],
+                errorHint = null } = {}) {
+    this._id = id;
+    this.command = command;
+    this.env = env;
+    this.extraArgs = extraArgs;
+    this.errorHint = errorHint;
+  }
+
+  get id() { return this._id; }
 
   async *runTurn(text, { sessionId = null, cwd = null, model = null } = {}, onProc) {
-    const argv = [CLAUDE_CMD, '--print', '--output-format', 'stream-json', '--verbose'];
+    const argv = [...this.command, '--print', '--output-format', 'stream-json', '--verbose'];
     // رابط headless نمی‌تواند پرامپت دسترسی را جواب بدهد (روی ماشین خود کاربر اجرا می‌شود)
     if (CLAUDE_SKIP_PERMISSIONS) argv.push('--dangerously-skip-permissions');
     else argv.push('--permission-mode', CLAUDE_PERMISSION_MODE);
@@ -17,9 +32,10 @@ export class ClaudeAdapter {
     if (chosenModel) argv.push('--model', chosenModel);
     if (sessionId) argv.push('--resume', sessionId);
     if (CLAUDE_EXTRA_ARGS) argv.push(...splitArgs(CLAUDE_EXTRA_ARGS));
+    argv.push(...this.extraArgs(cwd));
     argv.push(text);
 
-    const proc = Process.start(argv, { env: claudeEnv(), cwd });
+    const proc = Process.start(argv, { env: this.env(), cwd });
     if (onProc) onProc(proc);
     let lastSid = null;
     try {
@@ -33,7 +49,10 @@ export class ClaudeAdapter {
           lastSid = sid;
           yield ev('session', { session_id: sid });
         }
-        yield* mapObject(obj);
+        for (const e of mapObject(obj)) {
+          const hint = e.type === 'error' && this.errorHint && this.errorHint(e.text);
+          yield hint ? { ...e, text: `${e.text}\n${hint}` } : e;
+        }
       }
     } finally {
       await proc.close();
@@ -41,10 +60,26 @@ export class ClaudeAdapter {
 
     if (proc.returncode !== 0 && proc.returncode !== null) {
       const detail = proc.stderrText.trim();
-      yield ev('error', { text: `claude exited with code ${proc.returncode}\n${detail}` });
+      yield ev('error', { text: `${this._id} exited with code ${proc.returncode}\n${detail}` });
     }
   }
 }
+
+// وقتی cwd خود پوشه‌ی خانه است، Claude Code فایل ~/.claude/settings.json را «تنظیمات پروژه» هم
+// حساب می‌کند؛ توکن Open Source داخل آن اعتبارنامه‌ی iclaude را کنار می‌زند. پس آن لایه حذف می‌شود.
+function isHomeDir(cwd) {
+  if (!cwd) return false;
+  const norm = (p) => path.resolve(p).replace(/[\\/]+$/, '').toLowerCase();
+  return norm(cwd) === norm(os.homedir());
+}
+
+export const iclaudeAdapter = () => new ClaudeAdapter({
+  id: 'iclaude',
+  command: [ICLAUDE_CMD, 'run'],
+  env: iclaudeEnv,
+  extraArgs: (cwd) => (isHomeDir(cwd) ? ['--setting-sources', 'user,local'] : []),
+  errorHint: (text) => (/Non-interactive use/i.test(text || '') ? NON_INTERACTIVE_HINT : null),
+});
 
 function* mapObject(obj) {
   const kind = obj.type;

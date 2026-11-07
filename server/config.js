@@ -40,6 +40,11 @@ export const CLAUDE_EXTRA_ARGS = get('CLAUDE_EXTRA_ARGS', '');
 // پیش‌فرض: بدون رد کردن دسترسی‌ها (بر خلاف نسخه‌ی مرجع؛ با 1 فعال می‌شود)
 export const CLAUDE_SKIP_PERMISSIONS = flag('CLAUDE_SKIP_PERMISSIONS', '0');
 export const CLAUDE_CONTEXT_WINDOW = Number(get('CLAUDE_CONTEXT_WINDOW', '200000'));
+// نصب نسخه‌ی سفارشی (iclaude run ...) — ترنسکریپت‌ها در همان ~/.claude/projects ذخیره می‌شوند
+// سرویس iclaude حالت غیرتعاملی (--print) را با 403 رد می‌کند؛ پس در وب فقط نمایش داده می‌شود
+export const ICLAUDE_CMD = get('ICLAUDE_CMD', 'iclaude');
+export const ICLAUDE_HOME = get('ICLAUDE_HOME', path.join(os.homedir(), '.local', 'share', 'iclaude'));
+export const CLAUDE_HOME = get('CLAUDE_HOME', path.join(os.homedir(), '.local', 'share', 'claude'));
 
 // --- Codex ---
 export const CODEX_CMD = get('CODEX_CMD', 'codex');
@@ -81,6 +86,8 @@ function codexExecPrefixFromConfig(codexHome) {
 }
 
 export const CODEX_EXEC_PREFIX_ARGS = get('CODEX_EXEC_PREFIX_ARGS', codexExecPrefixFromConfig(CODEX_HOME));
+// codex ساده بدون پیشوند اجرا می‌شود؛ icodex همان لانچر سفارشی (codexx) با پیشوند بالاست
+export const isCodexFamily = (cli) => cli === 'codex' || cli === 'icodex';
 export const CODEX_SHELL_WRAP = get('CODEX_SHELL_WRAP', '');
 export const CODEX_SANDBOX = get('CODEX_SANDBOX', 'workspace-write');
 export const CODEX_EXTRA_ARGS = get('CODEX_EXTRA_ARGS', '');
@@ -108,6 +115,16 @@ export function claudeEnv() {
   return mergeDotenv({ ...process.env }, (k) => CLAUDE_ENV_PREFIXES.some((p) => k.startsWith(p)));
 }
 
+// iclaude دسترسی خودش را تنظیم می‌کند؛ کلیدهای ANTHROPIC_ (چه از .env چه از محیط سرور)
+// اعتبارنامه‌ی iclaude را کنار می‌زنند و درخواست را به Open Source می‌برند — پس حذف می‌شوند.
+export function iclaudeEnv() {
+  const env = {};
+  for (const [k, v] of Object.entries(process.env)) {
+    if (!k.startsWith('ANTHROPIC_') && k !== 'CLAUDE_CONFIG_DIR') env[k] = v;
+  }
+  return env;
+}
+
 export function codexEnv() {
   const env = {};
   for (const [k, v] of Object.entries(process.env)) {
@@ -121,8 +138,10 @@ export function configuredClis() {
   const claudeReady = ['ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_API_KEY']
     .some((key) => get(key));
   return [
-    { id: 'claude', label: 'Claude', configured: claudeReady },
+    { id: 'claude', label: 'Open Source', configured: claudeReady },
+    ...(fs.existsSync(ICLAUDE_HOME) ? [{ id: 'iclaude', label: 'iclaude', configured: false }] : []),
     { id: 'codex', label: 'Codex', configured: true },
+    ...(CODEX_EXEC_PREFIX_ARGS ? [{ id: 'icodex', label: 'icodex', configured: true }] : []),
   ];
 }
 

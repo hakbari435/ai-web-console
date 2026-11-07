@@ -67,6 +67,16 @@ export function remove(id) {
   writeJson(FILE, data);
 }
 
+export function removeByCwd(cwd) {
+  if (!cwd) return;
+  const data = load();
+  const kept = data.conversations.filter((c) => c.cwd !== cwd);
+  if (kept.length !== data.conversations.length) {
+    data.conversations = kept;
+    writeJson(FILE, data);
+  }
+}
+
 export function deleteBySession(cli, sessionId) {
   if (!sessionId) return;
   const data = load();

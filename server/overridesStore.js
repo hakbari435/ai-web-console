@@ -10,8 +10,16 @@ export function allNames() {
   return readJson(FILE, {});
 }
 
+// claude/iclaude و codex/icodex پوشه‌ی سشن مشترک دارند؛ نام‌های قدیمی ممکن است با کلید دیگری ذخیره شده باشند
+const SIBLING = { claude: 'iclaude', iclaude: 'claude', codex: 'icodex', icodex: 'codex' };
+
+export function nameFrom(names, cli, sessionId) {
+  return names[key(cli, sessionId)] ||
+    (SIBLING[cli] ? names[key(SIBLING[cli], sessionId)] : null) || null;
+}
+
 export function getName(cli, sessionId) {
-  return allNames()[key(cli, sessionId)] || null;
+  return nameFrom(allNames(), cli, sessionId);
 }
 
 export function setName(cli, sessionId, name) {

@@ -16,6 +16,7 @@ import * as discovery from './discovery.js';
 import { allGoals, getGoal } from './goals.js';
 import { searchTranscripts } from './transcriptSearch.js';
 import { Manager, ADAPTERS } from './manager.js';
+import { watchSessions } from './watcher.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
@@ -67,7 +68,7 @@ async function modelsPayload(forceRefresh = false) {
   const catalog = await getCatalog(forceRefresh);
   let cat = catalog;
   if (catalog.models && catalog.models.length) {
-    configured.codex = catalog.models.map((m) => m.id);
+    configured.codex = configured.icodex = catalog.models.map((m) => m.id);
   } else {
     cat = {
       ...catalog,
@@ -117,6 +118,15 @@ app.get('/api/search', (req, res) => {
   res.json(payload);
 });
 
+// گفتگوهایی که cli ذخیره‌شده‌شان با سشن روی دیسک نمی‌خواند (claude↔iclaude، codex↔icodex)
+const CLI_FAMILIES = new Set(['claude', 'iclaude', 'codex', 'icodex']);
+function syncCli(conv) {
+  if (!CLI_FAMILIES.has(conv.cli) || !conv.session_id) return conv;
+  const meta = discovery.sessionMeta(conv.cli, conv.session_id);
+  if (!meta || meta.cli === conv.cli) return conv;
+  return sessionStore.update(conv.id, { cli: meta.cli }) || conv;
+}
+
 // ---- سشن‌های روی دیسک ----
 app.get('/api/sessions', (req, res) => {
   const sessions = discovery.listSessions(req.query.cli || 'all', Number(req.query.limit) || 0);
@@ -124,17 +134,18 @@ app.get('/api/sessions', (req, res) => {
   const conversations = new Map(
     sessionStore.listConversations()
       .filter((c) => c.session_id)
+      .map(syncCli)
       .map((c) => [`${c.cli}:${c.session_id}`, c]),
   );
   const gmap = allGoals();
   for (const s of sessions) {
-    const name = names[`${s.cli}:${s.session_id}`];
+    const name = overrides.nameFrom(names, s.cli, s.session_id);
     if (name) s.title = name;
     else {
       const conv = conversations.get(`${s.cli}:${s.session_id}`);
       if (conv && conv.title) s.title = conv.title;
     }
-    if (s.cli === 'codex') {
+    if (config.isCodexFamily(s.cli)) {
       const g = gmap[s.session_id];
       if (g) {
         s.goal_status = g.status;
@@ -206,9 +217,33 @@ app.delete('/api/sessions/:cli/:session_id', (req, res) => {
   res.json({ ok });
 });
 
+// حذف کل پروژه: همه‌ی سشن‌های روی دیسک آن cwd + گفتگوها و نام‌های سفارشی
+app.delete('/api/sessions/project', (req, res) => {
+  const cwd = String(req.query.cwd || '');
+  if (!cwd) return res.status(400).json({ error: 'cwd is required' });
+
+  const sessions = discovery.listSessions('all', 0).filter((s) => (s.cwd || '') === cwd);
+  for (const s of sessions) {
+    const conv = sessionStore.findBySession(s.cli, s.session_id);
+    if (conv && manager.isBusy(conv.id)) {
+      return res.status(409).json({ error: 'یک سشن این پروژه در حال اجراست؛ بعد از پایان نوبت دوباره تلاش کنید.' });
+    }
+  }
+
+  let deleted = 0;
+  for (const s of sessions) {
+    if (discovery.deleteSession(s.cli, s.session_id)) deleted++;
+    sessionStore.deleteBySession(s.cli, s.session_id);
+    overrides.removeName(s.cli, s.session_id);
+  }
+  // گفتگوهای بدون سشن (در انتظار شروع) با همین پوشه
+  sessionStore.removeByCwd(cwd);
+  res.json({ ok: true, deleted });
+});
+
 // ---- گفتگوها ----
 app.get('/api/conversations', (_req, res) => {
-  const conversations = sessionStore.listConversations();
+  const conversations = sessionStore.listConversations().map(syncCli);
   for (const conv of conversations) {
     if (conv.session_id) {
       const name = overrides.getName(conv.cli, conv.session_id);
@@ -238,7 +273,7 @@ app.post('/api/conversations', (req, res) => {
   res.json(sessionStore.create({
     cli, title, cwd,
     model: req.body.model || null,
-    reasoningEffort: cli === 'codex' ? (effort || null) : null,
+    reasoningEffort: config.isCodexFamily(cli) ? (effort || null) : null,
   }));
 });
 
@@ -287,7 +322,7 @@ app.get('/api/conversations/:cid', (req, res) => {
   if (conv.session_id) {
     const name = overrides.getName(conv.cli, conv.session_id);
     if (name) title = name;
-    if (conv.cli === 'codex') goal = getGoal(conv.session_id);
+    if (config.isCodexFamily(conv.cli)) goal = getGoal(conv.session_id);
     usage = discovery.usageMeta(conv.cli, conv.session_id);
   }
   const publicMessages = messages.map((m) => {
@@ -385,6 +420,7 @@ app.delete('/api/conversations/:cid', (req, res) => {
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 const manager = new Manager();
+watchSessions(manager);
 
 function originAllowed(origin, host) {
   if (!origin) return true;

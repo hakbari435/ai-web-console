@@ -6,10 +6,53 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { randomUUID } from 'node:crypto';
-import { CLAUDE_CONTEXT_WINDOW } from './config.js';
+import { CLAUDE_CONTEXT_WINDOW, CLAUDE_HOME, ICLAUDE_HOME, isCodexFamily } from './config.js';
 
 export const CLAUDE_PROJECTS = path.join(os.homedir(), '.claude', 'projects');
+
+// iclaude پوشه‌ی projects را با claude مشترک دارد؛ تشخیص سشن‌های آن از روی:
+//   ۱) history.jsonl و session-env خود iclaude (سشن‌های تعاملی)
+//   ۲) نسخه‌ی Claude Code ثبت‌شده در ترنسکریپت (سشن‌های --print که تاریخچه ندارند)
+const ICLAUDE_CONFIG = path.join(ICLAUDE_HOME, 'claude-config');
+const isClaudeFamily = (cli) => cli === 'claude' || cli === 'iclaude';
+let iclaudeCache = { stamp: null, ids: new Set(), versions: new Set() };
+
+function versionDirs(dir) {
+  try {
+    return fs.readdirSync(dir).filter((n) => /^\d+\.\d+\.\d+/.test(n));
+  } catch { return []; }
+}
+
+function iclaudeMarkers() {
+  const historyFile = path.join(ICLAUDE_CONFIG, 'history.jsonl');
+  const envDir = path.join(ICLAUDE_CONFIG, 'session-env');
+  const stamp = `${safeMtime(historyFile)}|${safeMtime(envDir)}|${safeMtime(ICLAUDE_HOME)}`;
+  if (iclaudeCache.stamp === stamp) return iclaudeCache;
+  const ids = new Set();
+  try {
+    for (const line of fs.readFileSync(historyFile, 'utf8').split(/\r?\n/)) {
+      const obj = loads(line);
+      if (obj && obj.sessionId) ids.add(obj.sessionId);
+    }
+  } catch { /* بدون تاریخچه */ }
+  try {
+    for (const name of fs.readdirSync(envDir)) ids.add(name);
+  } catch { /* بدون session-env */ }
+  // نسخه‌هایی که فقط iclaude نصب کرده (نه claude سیستم)
+  const own = new Set(versionDirs(path.join(CLAUDE_HOME, 'versions')));
+  const versions = new Set(versionDirs(ICLAUDE_HOME).filter((v) => !own.has(v)));
+  iclaudeCache = { stamp, ids, versions };
+  return iclaudeCache;
+}
+
+function claudeCliFor(sessionId, version) {
+  const { ids, versions } = iclaudeMarkers();
+  return ids.has(sessionId) || (version && versions.has(version)) ? 'iclaude' : 'claude';
+}
 export const CODEX_SESSIONS = path.join(os.homedir(), '.codex', 'sessions');
+
+// codexx (= codex -c model_provider=proxy) همان پوشه‌ی sessions را دارد؛ provider در session_meta ثبت می‌شود
+const ICODEX_PROVIDER = 'proxy';
 
 const SCAN_LINES = 500;
 
@@ -58,8 +101,10 @@ function walk(dir, filter, out = []) {
 // ------------------------------------------------------------------ //
 export function listSessions(cli = 'all', limit = 0) {
   let out = [];
-  if (cli === 'all' || cli === 'claude') out = out.concat(listClaude(limit));
-  if (cli === 'all' || cli === 'codex') out = out.concat(listCodex(limit));
+  if (cli === 'all') out = out.concat(listClaude(limit));
+  else if (isClaudeFamily(cli)) out = out.concat(listClaude(0).filter((s) => s.cli === cli));
+  if (cli === 'all') out = out.concat(listCodex(limit));
+  else if (isCodexFamily(cli)) out = out.concat(listCodex(0).filter((s) => s.cli === cli));
   out.sort((a, b) => b.mtime - a.mtime);
   return limit > 0 ? out.slice(0, limit) : out;
 }
@@ -102,7 +147,7 @@ function userText(content) {
 
 function claudeSummary(fp) {
   const sessionId = path.basename(fp).replace(/\.jsonl$/, '');
-  let cwd = null, title = null, firstUser = null;
+  let cwd = null, title = null, firstUser = null, version = null;
   try {
     const lines = fs.readFileSync(fp, 'utf8').split(/\r?\n/);
     for (let idx = 0; idx < lines.length && idx <= SCAN_LINES; idx++) {
@@ -110,15 +155,16 @@ function claudeSummary(fp) {
       if (!obj) continue;
       if (obj.type === 'ai-title' && obj.aiTitle) title = obj.aiTitle;
       if (cwd === null && obj.cwd) cwd = obj.cwd;
+      if (version === null && obj.version) version = obj.version;
       if (firstUser === null && obj.type === 'user') {
         firstUser = userText((obj.message || {}).content);
       }
-      if (title && cwd && firstUser) break;
+      if (title && cwd && firstUser && version) break;
     }
   } catch { return null; }
   if (!title && !firstUser) return null;
   return {
-    cli: 'claude',
+    cli: claudeCliFor(sessionId, version),
     session_id: sessionId,
     title: (title || firstUser || 'بدون عنوان').trim().slice(0, 80),
     cwd: cwd || '',
@@ -137,7 +183,7 @@ function codexVisibleUser(text) {
 }
 
 function codexSummary(fp) {
-  let sessionId = null, cwd = null, title = null;
+  let sessionId = null, cwd = null, title = null, provider = null;
   try {
     const lines = fs.readFileSync(fp, 'utf8').split(/\r?\n/);
     for (let idx = 0; idx < lines.length && idx <= SCAN_LINES; idx++) {
@@ -147,6 +193,7 @@ function codexSummary(fp) {
         const pl = obj.payload || {};
         sessionId = pl.id || sessionId;
         cwd = pl.cwd || cwd;
+        provider = pl.model_provider || provider;
       }
       const pl = obj.payload || {};
       if (title === null && obj.type === 'event_msg' && pl.type === 'user_message') {
@@ -161,7 +208,7 @@ function codexSummary(fp) {
   } catch { return null; }
   if (!sessionId) return null;
   return {
-    cli: 'codex',
+    cli: provider === ICODEX_PROVIDER ? 'icodex' : 'codex',
     session_id: sessionId,
     title: (title || 'بدون عنوان').trim().slice(0, 80),
     cwd: cwd || '',
@@ -173,8 +220,8 @@ function codexSummary(fp) {
 //  پارس کامل ترنسکریپت (تاریخچه برای نمایش در UI)
 // ------------------------------------------------------------------ //
 export function readTranscript(cli, sessionId) {
-  if (cli === 'claude') return claudeTranscript(sessionId);
-  if (cli === 'codex') return codexTranscript(sessionId);
+  if (isClaudeFamily(cli)) return claudeTranscript(sessionId);
+  if (isCodexFamily(cli)) return codexTranscript(sessionId);
   return [null, null];
 }
 
@@ -207,11 +254,11 @@ function firstLine(fp) {
 }
 
 export function sessionMeta(cli, sessionId) {
-  if (cli === 'claude') {
+  if (isClaudeFamily(cli)) {
     const fp = findClaudeFile(sessionId);
     return fp ? claudeSummary(fp) : null;
   }
-  if (cli === 'codex') {
+  if (isCodexFamily(cli)) {
     const fp = findCodexFile(sessionId);
     return fp ? codexSummary(fp) : null;
   }
@@ -423,8 +470,8 @@ function firstUserTitle(messages) {
 //  متادیتای مصرف توکن
 // ------------------------------------------------------------------ //
 export function usageMeta(cli, sessionId) {
-  if (cli === 'codex') return codexUsage(sessionId);
-  if (cli === 'claude') return claudeUsage(sessionId);
+  if (isCodexFamily(cli)) return codexUsage(sessionId);
+  if (isClaudeFamily(cli)) return claudeUsage(sessionId);
   return null;
 }
 
@@ -510,21 +557,21 @@ function claudeUsage(sessionId) {
 //  حذف / فورک سشن
 // ------------------------------------------------------------------ //
 export function deleteSession(cli, sessionId) {
-  const fp = cli === 'claude' ? findClaudeFile(sessionId) :
-    cli === 'codex' ? findCodexFile(sessionId) : null;
+  const fp = isClaudeFamily(cli) ? findClaudeFile(sessionId) :
+    isCodexFamily(cli) ? findCodexFile(sessionId) : null;
   if (!fp) return false;
   try { fs.unlinkSync(fp); return true; } catch { return false; }
 }
 
 export function forkSession(cli, sessionId, cutoffLine = null) {
-  if (!sessionId || !['claude', 'codex'].includes(cli)) return null;
+  if (!sessionId || !(isClaudeFamily(cli) || isCodexFamily(cli))) return null;
   if (cutoffLine !== null && (!Number.isInteger(cutoffLine) || cutoffLine < 1)) return null;
-  const source = cli === 'claude' ? findClaudeFile(sessionId) : findCodexFile(sessionId);
+  const source = isClaudeFamily(cli) ? findClaudeFile(sessionId) : findCodexFile(sessionId);
   if (!source) return null;
 
   const newId = randomUUID();
   let destination;
-  if (cli === 'claude') {
+  if (isClaudeFamily(cli)) {
     destination = path.join(path.dirname(source), `${newId}.jsonl`);
   } else {
     const now = new Date();

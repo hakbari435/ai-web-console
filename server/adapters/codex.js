@@ -1,5 +1,6 @@
 // آداپتور Codex CLI — هر نوبت یک پروسه:
 //   codex exec [resume SID] --json --skip-git-repo-check --sandbox <mode> [-C cwd] -o <file> -
+//   icodex: همان، با پیشوند لانچر سفارشی (codexx = codex -c model_provider=proxy --search)
 // پرامپت از stdin نوشته می‌شود تا escape شلی لازم نباشد.
 import fs from 'node:fs';
 import os from 'node:os';
@@ -12,7 +13,12 @@ const ASSISTANT_ITEMS = ['assistant_message', 'agent_message', 'message', 'outpu
 const SHELL_ITEMS = ['command_execution', 'local_shell_call', 'exec_command', 'shell_call'];
 
 export class CodexAdapter {
-  get id() { return 'codex'; }
+  constructor({ id = 'codex', prefixArgs = '' } = {}) {
+    this._id = id;
+    this.prefixArgs = prefixArgs;
+  }
+
+  get id() { return this._id; }
 
   async *runTurn(text, { sessionId = null, cwd = null, model = null,
                          reasoningEffort = null } = {}, onProc) {
@@ -39,7 +45,7 @@ export class CodexAdapter {
         if (sid) attemptArgs.push(subcommand, sid, '-');
         else attemptArgs.push('-');
 
-        const argv = codexCommand(attemptArgs);
+        const argv = codexCommand(attemptArgs, this.prefixArgs);
         proc = Process.start(argv, { env: codexEnv(), cwd, stdinText: text });
         if (onProc) onProc(proc);
         let lastSid = null;
@@ -89,7 +95,7 @@ export class CodexAdapter {
       if (proc && proc.returncode !== 0 && proc.returncode !== null) {
         const detail = cleanStderr(proc.stderrText);
         const suffix = detail ? `\n${detail}` : '';
-        yield ev('error', { text: `codex exited with code ${proc.returncode}${suffix}` });
+        yield ev('error', { text: `${this._id} exited with code ${proc.returncode}${suffix}` });
       }
     } finally {
       try { fs.unlinkSync(lastMsgFile); } catch { /* بی‌اهمیت */ }

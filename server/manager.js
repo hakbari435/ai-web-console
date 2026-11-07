@@ -1,14 +1,16 @@
 // مدیر نوبت‌های پس‌زمینه + توزیع رویدادها به کلاینت‌های WebSocket.
 // نوبت به «گفتگو» گره خورده نه به سوکتِ شروع‌کننده — جابه‌جا شدن آن را قطع نمی‌کند.
-import { WORKDIR } from './config.js';
+import { WORKDIR, CODEX_EXEC_PREFIX_ARGS, isCodexFamily } from './config.js';
 import { readTranscript } from './discovery.js';
 import * as sessionStore from './sessionStore.js';
-import { ClaudeAdapter } from './adapters/claude.js';
+import { ClaudeAdapter, iclaudeAdapter } from './adapters/claude.js';
 import { CodexAdapter } from './adapters/codex.js';
 
 export const ADAPTERS = {
   claude: new ClaudeAdapter(),
+  iclaude: iclaudeAdapter(),
   codex: new CodexAdapter(),
+  icodex: new CodexAdapter({ id: 'icodex', prefixArgs: CODEX_EXEC_PREFIX_ARGS }),
 };
 
 export class Manager {
@@ -136,7 +138,7 @@ export class Manager {
         sessionId: conv.session_id || null,
         cwd,
         model: conv.model || null,
-        reasoningEffort: conv.cli === 'codex' ? (conv.reasoning_effort || null) : null,
+        reasoningEffort: isCodexFamily(conv.cli) ? (conv.reasoning_effort || null) : null,
       };
       for await (const evData of adapter.runTurn(text, runArgs, (p) => this.procs.set(cid, p))) {
         if (evData.type === 'session') {

@@ -123,7 +123,7 @@ const state = {
   codexCatalog: { source: "fallback", models: [], error: null },
   codexDefaults: new Map(),
   viewCid: null, busy: new Set(), ws: null, assistantBody: null,
-  expanded: new Set(), _extInit: false, queue: [], sidebarCollapsed: false,
+  expanded: new Set(), _extInit: false, queue: [], sidebarCollapsed: false, fullHistory: false,
   searchOpen: false, searchScope: "all", searchRequest: 0,
   collapsedSearchProjects: new Set(), collapsedSearchSessions: new Set(),
 };
@@ -147,6 +147,8 @@ async function api(method, url, body) {
 const messagesEl = () => $("#messages");
 function scrollDown() { const m = messagesEl(); m.scrollTop = m.scrollHeight; }
 function cliLabel(id) { const c = state.clis.find((x) => x.id === id); return c ? c.label : id; }
+function isCodexCli(id) { return id === "codex" || id === "icodex"; }
+function cliClass(id) { return ["codex", "icodex", "iclaude"].includes(id) ? " " + id : ""; }
 function trimmedPath(p) { return String(p || "").replace(/[\\/]+$/, ""); }
 function baseName(p) {
   const path = trimmedPath(p);
@@ -484,6 +486,14 @@ function renderSidebar() {
       openCreateConversationModal(cwd === "—" ? state.workdir : cwd);
     };
     head.appendChild(add);
+    if (cwd !== "—") {
+      const del = el("button", "group-del", "🗑");
+      del.type = "button";
+      del.title = "حذف کل پروژه و همه‌ی سشن‌های آن";
+      del.setAttribute("aria-label", "حذف کل پروژه و همه‌ی سشن‌های آن");
+      del.onclick = (e) => { e.stopPropagation(); removeProject(cwd, sessions.length); };
+      head.appendChild(del);
+    }
     head.appendChild(el("span", "group-count", sessions.length.toLocaleString("fa-IR")));
     head.onclick = () => { open ? state.expanded.delete(cwd) : state.expanded.add(cwd); renderSidebar(); };
     list.appendChild(head);
@@ -518,7 +528,7 @@ function makeItem({ cli, title, subtitle, active, busy, attention, dot, onOpen, 
   const item = el("div", "conv" + (active ? " active" : ""));
   const main = el("div", "conv-main");
   const titleEl = el("div", "conv-title");
-  const badge = el("span", "mini-badge" + (cli === "codex" ? " codex" : ""));
+  const badge = el("span", "mini-badge" + cliClass(cli));
   badge.textContent = cliLabel(cli);
   titleEl.appendChild(badge);
   if (dot) {
@@ -675,6 +685,22 @@ async function removeSession(s) {
   await loadConversations();
   await loadExternal();
 }
+async function removeProject(cwd, sessionCount) {
+  const name = baseName(cwd) || cwd;
+  const count = (sessionCount || 0).toLocaleString("fa-IR");
+  if (!confirm(`حذف کل پروژه «${name}»؟\n\nهمه‌ی ${count} سشن این پروژه به‌همراه فایل‌های ترنسکریپت واقعی Claude/Codex پاک می‌شود و قابل بازیابی نیست.`)) return;
+  const result = await api("DELETE", `/api/sessions/project?cwd=${encodeURIComponent(cwd)}`);
+  if (!result || result.error) {
+    alert((result && result.error) || "حذف پروژه انجام نشد.");
+    return;
+  }
+  const conv = state.conversations.find((c) => c.id === state.viewCid);
+  if (conv && conv.cwd === cwd) resetView();
+  else if (conv && !conv.cwd && cwd === "—") resetView();
+  state.expanded.delete(cwd);
+  await loadConversations();
+  await loadExternal();
+}
 
 /* ------------------------------------------------------------------ *
  *  Open / view a conversation
@@ -759,7 +785,7 @@ function pendingItem(c) {
   });
 }
 function codexDefaultsFor(conv) {
-  if (!conv || conv.cli !== "codex") return null;
+  if (!conv || !isCodexCli(conv.cli)) return null;
   return state.codexDefaults.get(codexDefaultsKey(conv.cwd)) || null;
 }
 function codexModelLabel(modelId) {
@@ -774,10 +800,10 @@ function modelOptions(conv) {
   const defaultLabel = defaults && defaults.model
     ? `پیش‌فرض (${codexModelLabel(defaults.model)})`
     : "پیش‌فرض";
-  const defaultDescription = cli === "codex" ? "تنظیم مؤثر Codex برای این پروژه" : "";
+  const defaultDescription = isCodexCli(cli) ? "تنظیم مؤثر Codex برای این پروژه" : "";
   return [{ id: "", label: defaultLabel, description: defaultDescription }].concat(
     list.map((id) => {
-      const info = cli === "codex" ? catalog.get(id) : null;
+      const info = isCodexCli(cli) ? catalog.get(id) : null;
       return { id, label: info ? info.display_name : id, description: info ? info.description : "" };
     }),
   );
@@ -799,7 +825,7 @@ function effortOptions(conv, modelId = conv.model || "") {
 function renderEffortSelect(conv) {
   const label = $("#effort-label");
   const sel = $("#effort-select");
-  if (conv.cli !== "codex") {
+  if (!isCodexCli(conv.cli)) {
     label.hidden = true;
     sel.hidden = true;
     sel.onchange = null;
@@ -890,7 +916,7 @@ async function loadModels(forceRefresh = false) {
   }
 }
 async function loadCodexDefaults(conv, forceRefresh = false) {
-  if (!conv || conv.cli !== "codex" || !conv.cwd) return null;
+  if (!conv || !isCodexCli(conv.cli) || !conv.cwd) return null;
   const key = codexDefaultsKey(conv.cwd);
   if (!forceRefresh && state.codexDefaults.has(key)) return state.codexDefaults.get(key);
   const suffix = forceRefresh ? "&refresh=true" : "";
@@ -927,9 +953,9 @@ function renderCreateModelFields(draft, modelSelect, effortField, effortSelect) 
     modelSelect.value = "";
   }
 
-  effortField.hidden = draft.cli !== "codex";
+  effortField.hidden = !isCodexCli(draft.cli);
   effortSelect.innerHTML = "";
-  if (draft.cli !== "codex") {
+  if (!isCodexCli(draft.cli)) {
     draft.reasoning_effort = "";
     return;
   }
@@ -974,9 +1000,10 @@ async function browseForProject() {
 
 function openCreateConversationModal(cwd) {
   const projectPath = cwd || state.workdir || "";
-  const draft = { cli: "codex", cwd: projectPath, model: "", reasoning_effort: "" };
+  const defaultCli = state.clis.some((cli) => cli.id === "icodex") ? "icodex" : "codex";
+  const draft = { cli: defaultCli, cwd: projectPath, model: "", reasoning_effort: "" };
   const availableClis = state.clis.length ? state.clis : [
-    { id: "claude", label: "Claude" }, { id: "codex", label: "Codex" },
+    { id: "claude", label: "Open Source" }, { id: "codex", label: "Codex" },
   ];
   $("#modal-title").textContent = "ایجاد گفتگوی جدید";
   const body = $("#modal-body");
@@ -1034,7 +1061,7 @@ function openCreateConversationModal(cwd) {
     draft.model = "";
     draft.reasoning_effort = "";
     renderCreateModelFields(draft, modelSelect, effortField, effortSelect);
-    if (draft.cli === "codex") {
+    if (isCodexCli(draft.cli)) {
       await loadCodexDefaults(draft);
       if (form.isConnected) renderCreateModelFields(draft, modelSelect, effortField, effortSelect);
     }
@@ -1056,7 +1083,7 @@ function openCreateConversationModal(cwd) {
       conv = await api("POST", "/api/conversations", {
         title, cli: draft.cli, cwd: draft.cwd || null,
         model: draft.model || null,
-        reasoning_effort: draft.cli === "codex" ? (draft.reasoning_effort || null) : null,
+        reasoning_effort: isCodexCli(draft.cli) ? (draft.reasoning_effort || null) : null,
       });
     } catch (e) {
       conv = { error: "ارتباط با سرور برقرار نشد." };
@@ -1076,7 +1103,7 @@ function openCreateConversationModal(cwd) {
 
   // Fetch the project-specific Codex defaults after the modal is visible.
   loadCodexDefaults(draft).then(() => {
-    if (form.isConnected && draft.cli === "codex") {
+    if (form.isConnected && isCodexCli(draft.cli)) {
       renderCreateModelFields(draft, modelSelect, effortField, effortSelect);
     }
   });
@@ -1091,8 +1118,8 @@ function openModelsModal() {
     const sec = el("div", "model-sec");
     const head = el("div", "model-sec-head");
     head.appendChild(el("div", "model-sec-title", cli.label));
-    const liveCodex = cli.id === "codex" && state.codexCatalog.source === "codex";
-    if (cli.id === "codex") {
+    const liveCodex = isCodexCli(cli.id) && state.codexCatalog.source === "codex";
+    if (isCodexCli(cli.id)) {
       const refresh = el("button", "catalog-refresh", "دریافت دوباره از Codex");
       refresh.onclick = async () => {
         refresh.disabled = true;
@@ -1108,7 +1135,7 @@ function openModelsModal() {
       head.appendChild(refresh);
     }
     sec.appendChild(head);
-    if (cli.id === "codex") {
+    if (isCodexCli(cli.id)) {
       const note = liveCodex
         ? "این فهرست و effortهای هر مدل مستقیماً از Codex دریافت شده‌اند."
         : "Codex در دسترس نبود؛ فهرست ذخیره‌شده نمایش داده می‌شود و قابل ویرایش است.";
@@ -1357,7 +1384,7 @@ function renderSearchResults(payload, query) {
       const head = el("div", "search-session-head");
       const sessionKey = `${result.cli}:${result.session_id}`;
       const sessionCollapsed = state.collapsedSearchSessions.has(sessionKey);
-      const badge = el("span", "mini-badge" + (result.cli === "codex" ? " codex" : ""), cliLabel(result.cli));
+      const badge = el("span", "mini-badge" + cliClass(result.cli), cliLabel(result.cli));
       head.appendChild(badge);
       const title = el("div", "search-session-title");
       title.textContent = result.title || "بدون عنوان";
@@ -1512,6 +1539,38 @@ async function loadEarlier(conv, btn) {
   m.innerHTML = "";
   all.forEach((msg, index) => renderOneMessage(conv, msg, index));
   m.scrollTop = 0;
+  state.fullHistory = true;
+}
+
+// The session file changed on disk (e.g. chatting with the CLI in a terminal):
+// re-read it and re-render, keeping the scroll position unless already at the bottom.
+let transcriptReloading = false, transcriptReloadPending = false;
+async function reloadViewedConversation() {
+  if (transcriptReloading) { transcriptReloadPending = true; return; }
+  transcriptReloading = true;
+  try {
+    const id = state.viewCid;
+    if (!id || state.busy.has(id)) return;
+    const full = state.fullHistory;
+    const conv = await api("GET", `/api/conversations/${id}?limit=${full ? 0 : 50}`);
+    if (!conv || conv.error || state.viewCid !== id || state.busy.has(id)) return;
+    const m = messagesEl();
+    const atBottom = m.scrollHeight - m.scrollTop - m.clientHeight < 80;
+    const prevTop = m.scrollTop;
+    if (full) {
+      m.innerHTML = "";
+      (conv.messages || []).forEach((msg, index) => renderOneMessage(conv, msg, index));
+    } else {
+      renderMessages(conv);
+    }
+    setConversationHeading(conv.title || "گفتگو", conv.cwd);
+    setPageTitle(conv.title || "گفتگو");
+    renderUsage(conv);
+    if (atBottom) scrollDown(); else m.scrollTop = prevTop;
+  } finally {
+    transcriptReloading = false;
+    if (transcriptReloadPending) { transcriptReloadPending = false; reloadViewedConversation(); }
+  }
 }
 
 async function openConversation(id, { historyMode = "push", messageIndex = null } = {}) {
@@ -1519,6 +1578,7 @@ async function openConversation(id, { historyMode = "push", messageIndex = null 
   if (state.viewCid && state.viewCid !== id) wsSend({ type: "close", cid: state.viewCid });
   state.viewCid = id;
   state.assistantBody = null;
+  state.fullHistory = false;
   $("#stats-btn").hidden = true;
   state.queue = []; renderQueue();
   const limit = Number.isInteger(messageIndex) ? 0 : 50;
@@ -1542,7 +1602,7 @@ async function openConversation(id, { historyMode = "push", messageIndex = null 
   const badge = $("#conv-cli-badge");
   badge.hidden = false;
   badge.textContent = cliLabel(conv.cli);
-  badge.className = "badge" + (conv.cli === "codex" ? " codex" : "");
+  badge.className = "badge" + cliClass(conv.cli);
   await loadCodexDefaults(conv);
   renderModelSelect(conv);
   renderUsage(conv);
@@ -1650,6 +1710,12 @@ function handleEvent(ev) {
     }
     case "queued":
       if (ev.cid === state.viewCid) { state.queue = ev.items || []; renderQueue(); }
+      return;
+    case "transcript_changed":
+      if (ev.cid === state.viewCid && !state.busy.has(ev.cid)) reloadViewedConversation();
+      return;
+    case "sessions_changed":
+      loadExternal();
       return;
   }
   if (ev.cid && ev.cid !== state.viewCid) return; // stream event for another view

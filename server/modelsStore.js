@@ -7,13 +7,15 @@ const FILE = path.join(BASE_DIR, '.ai-web-console', 'models.json');
 
 const defaults = () => ({
   claude: CLAUDE_MODELS.split(',').map((s) => s.trim()).filter(Boolean),
+  iclaude: CLAUDE_MODELS.split(',').map((s) => s.trim()).filter(Boolean),
   codex: CODEX_MODELS.split(',').map((s) => s.trim()).filter(Boolean),
+  icodex: CODEX_MODELS.split(',').map((s) => s.trim()).filter(Boolean),
 });
 
 export function getAll() {
   const data = defaults();
   const saved = readJson(FILE, {});
-  for (const cli of ['claude', 'codex']) {
+  for (const cli of ['claude', 'iclaude', 'codex', 'icodex']) {
     if (Array.isArray(saved[cli])) data[cli] = saved[cli].map(String);
   }
   return data;
